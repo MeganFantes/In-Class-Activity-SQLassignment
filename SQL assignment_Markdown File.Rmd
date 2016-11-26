@@ -1,0 +1,402 @@
+---
+title: "Megan Fantes"
+author: "SQL Assignment"
+date: "November 25, 2016"
+output: pdf_document
+---
+
+First, we must connect to the Postgres database:
+
+```{r, warning=FALSE, message=FALSE}
+library(RPostgreSQL)
+
+## Set up the connection parameters you will need
+host <- "analyticsga-east2.c20gkj5cvu3l.us-east-1.rds.amazonaws.com"
+port <- "5432"
+username <- "analytics_student"
+password <- "analyticsga"
+
+## Use the name of the specific database you will access
+dbname <- "iowa_liquor_sales_database"
+
+## Specify the PostreSQL driver
+drv <- dbDriver("PostgreSQL")
+
+## Now establish the connection
+con <- dbConnect(drv, user = username, password = password,
+dbname = dbname, port = port, host = host)
+```
+
+Now we make sure that we have established the proper connection with the database:
+
+```{r}
+## get a list of the tables in the database
+dbListTables(con)
+## get a list of the variable names in the "products" table
+dbListFields(con, "products")
+```
+
+\pagebreak
+
+#We can test the RpostgresSQL package by recreating the commands we did in class:
+
+Which items comes in packs larger than 12?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, pack",
+  "FROM products",
+  "WHERE pack > 12",
+  "ORDER BY pack"))
+
+## We use the SELECT DISTINCT command so we only get unique entries in our 
+## final table. We do not care if one product is entered 10 times in the 
+## original table, we only want it to appear once in our final table
+
+head(query)
+```
+
+Which items have a case cost of less than $70?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, case_cost",
+  "FROM products",
+  "WHERE case_cost < 70",
+  "ORDER BY case_cost"))
+
+head(query)
+```
+
+Which items come is packs larger than 12 AND have a case cost of less than $70?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, pack, case_cost",
+  "FROM products",
+  "WHERE pack > 12 AND case_cost < 70",
+  "ORDER BY case_cost, pack"))
+
+head(query)
+```
+
+Which items have a proof of 85 or more?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, proof",
+  "FROM products",
+  "WHERE cast(proof as integer) >= 85",
+  "ORDER BY proof"))
+
+## NOTICE: we needed to CAST the variable proof as an INTEGER in order to 
+## manipulate it like a number, because in the original table it is TEXT
+
+head(query)
+```
+
+Which items are in the whiskey or whiskies category OR are over 85 proof?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, category_name, proof",
+  "FROM products",
+  "WHERE category_name LIKE '%WHISK%' OR cast(proof as integer) >= 85"))
+
+head(query)
+```
+
+Which items are over 90 proof?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, proof",
+  "FROM products",
+  "WHERE cast(proof as integer) > 90",
+  "ORDER BY proof"))
+
+head(query)
+```
+
+Which items have a case cost of less than $60?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, case_cost",
+  "FROM products",
+  "WHERE case_cost < 60",
+  "ORDER BY case_cost"))
+
+head(query)
+```
+
+Which items are either Single Malt Scotches or Canadian Whiskies?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, category_name",
+  "FROM products",
+  "WHERE category_name = 'SINGLE MALT SCOTCH' OR category_name LIKE 'CANADIAN WHISK%'"))
+
+head(query)
+```
+
+Which items are in the whiskey (or whiskies) category?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description, category_name",
+  "FROM products",
+  "WHERE category_name LIKE '%WHISK%'"))
+
+head(query)
+```
+
+What is the most exensive purchase of Svedka?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT description, total",
+  "FROM sales",
+  "WHERE description LIKE '%Svedka%'",
+  "ORDER BY total DESC",
+  "LIMIT 1"))
+
+query
+```
+
+Which unique items in the "WHISK" category have a proof over or equal to 70?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT item_description AS Product, category_name, proof",
+  "FROM products",
+  "WHERE category_name LIKE '%WHISK%' AND cast(proof as integer) >= 70"))
+
+head(query)
+```
+
+How many items are available per vendor name?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT vendor_name, COUNT(item_no)",
+  "FROM products",
+  "GROUP BY vendor_name",
+  "ORDER BY count(item_no) DESC"))
+
+head(query)
+```
+
+What are the top 5 stores with the highest sales?
+
+```{r}
+query <- dbGetQuery(con, statement = paste(
+  "SELECT stores.name, SUM(sales.total)",
+  "FROM sales LEFT OUTER JOIN stores ON sales.store = stores.store",
+  "GROUP BY stores.name",
+  "ORDER BY sum(sales.total) DESC",
+  "LIMIT 5"))
+
+query
+```
+
+\pagebreak
+
+#Exploring case-cost
+
+```{r,echo=FALSE}
+library(knitr)
+```
+
+
+```{r,echo=FALSE,warning=FALSE}
+# Get the products table into a database so we can manipulate it:
+products <- dbGetQuery(con, statement = paste(
+  "SELECT *",
+  "FROM products"))
+
+# "attach" the products database so we can refer directly to the variable names
+attach(products)
+```
+
+We can start our exploration of case_cost by creating a histogram and calculating summary statistics:
+```{r, echo=FALSE}
+hist(case_cost, main = "Histogram of case_cost", xlab = "case_cost", ylab = "Number of Items")
+
+data.frame("mean" = mean(case_cost),
+           "variance" = var(case_cost),
+           "median" = median(case_cost))
+```
+
+Hmmmmmm, that is not very helpful. We can't immediately calculate the mean, median, and variance -- there is likely missing data that is preventing their calculation. And that histogram is not very pretty, it is strongly right-skewed. It seems like there are A LOT of cases with a very low cost (comparatively), and only a few with a very high cost.
+
+Let's figure out how many missing data points there are:
+
+```{r, echo=FALSE}
+na_entries <- case_cost[is.na(case_cost)]
+
+kable(data.frame("number of missing values" = length(na_entries)), format = "markdown")
+```
+
+OK, so there are 8 missing values in the data set. Let's try removing these missing data points and *then* calculating summary statistics:
+
+```{r, echo=FALSE}
+# we can use the na.rm function to remove the NA values from our dataset
+avg <- mean(case_cost, na.rm = TRUE)
+variance <- var(case_cost, na.rm = TRUE)
+minimum <- min(case_cost, na.rm = TRUE)
+med <- median(case_cost, na.rm = TRUE)
+maximum <- max(case_cost, na.rm = TRUE)
+
+# create a dataframe to display the mean and variance of our data,
+# or the "center and spread"
+center_and_spread <- data.frame("mean" = avg, "variance" = variance)
+# create a dataframe to dosplay the min, median, and max of our data,
+# or the "range"
+data_range <- data.frame("minimum" = minimum, "median" = med, "maximum" = maximum)
+
+kable(center_and_spread,format = "markdown",digits = 2)
+kable(data_range, format = "markdown", digits = 2)
+```
+
+Great! Now we have an idea of what our data looks like.  
+Our initial observations appear to be correct: The maximum value is over $7000 dollars, but the median cost is only $83, indicating a strong right-skew. An extremely large variance of $25,000 (much larger than the range of the data) confirms a strongly-skewed dataset as well.
+
+###Let's try to figure out if case cost is related to any other variables:
+
+**Maybe case cost is related to pack size?**
+
+First let's plot case cost vs. pack size:
+
+```{r, echo=FALSE}
+plot(pack, case_cost, main = "Plot of Case Cost vs. Number of Items per Pack", xlab = "Pack Size", ylab = "Case Cost")
+```
+
+There does not apppear to be a relationship, but let's run a quick regression on the data to check:
+
+```{r,echo=FALSE}
+casecost_v_pack <- lm(case_cost ~ pack)
+x <- summary(casecost_v_pack)
+kable(data.frame("p-value of pack size" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 3)
+```
+
+Pack size is NOT a significant predictor of case cost (p = 0.694, R^2^ < 0.0001).
+
+**Maybe case cost is related to shelf price?**
+
+Plot case cost vs. shelf price:
+
+```{r,echo=FALSE}
+plot(shelf_price, case_cost, main = "Plot of Case Cost vs. Shelf Price", xlab = "Shelf Price", ylab = "Case Cost")
+```
+
+It appears as if there *could be* a relationship here. Let's run a regression through the datapoints to see:
+
+```{r,echo=FALSE}
+casecost_v_shelfprice <- lm(case_cost ~ shelf_price)
+x <- summary(casecost_v_shelfprice)
+kable(data.frame("shelf price coefficient" = x$coefficients[2,1], "p-value of shelf price" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 2)
+```
+
+Huzzah! We found a variable that is significantly related to case cost. As shelf price increases by $1, case cost increases by $0.85, with p < 0.001, and nearly 50% of the variation in case cost is explained by shelf price (R^2^ = 0.47).
+
+**Maybe case cost is related to bottle size?**
+
+Plot case cost vs. bottle size:
+
+```{r,echo=FALSE}
+plot(bottle_size, case_cost, main = "Plot of Case Cost vs. Bottle Size", xlab = "Bottle Size", ylab = "Case Cost")
+```
+
+There does not apppear to be a relationship, because the bottle sizes seem to be right-skewed, with many small bottle and one VERY LARGE bottle. But let's run a quick regression on the data to check:
+
+```{r,echo=FALSE}
+casecost_v_bottlesize <- lm(case_cost ~ bottle_size)
+x <- summary(casecost_v_bottlesize)
+kable(data.frame("p-value of bottle size" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 3)
+```
+
+According to this regression, bottle size is a significant predictor of case cost (p < 0.0001). However, The R^2^ value for the regression is 0.005, which means that < 1% of the variation in Case Cost is explained by Bottle Size. Bottle Size appears to be an significant predictor of case cost because of one influential point, where bottle size = 140000 mL. Without this influential point, there does not appear to be a significant relationship between bottle size and case cost, thus we conclude that bottle size and case cost are not significantly correlated.
+
+**Maybe case cost is related to bottle price?**
+
+```{r, echo=FALSE,warning=FALSE,include=FALSE}
+# In order to analyze the relationship with bottle price, we must first convert the bottle price
+# values to numbers -- they are in the dataframe as monetary values, which look like strings
+# or factors.
+
+# original format of bottle_price
+head(products$bottle_price)
+
+# first we have to remove the "$" from the values
+# we use the explicit products$bottle_price variable reference so the values in the dataframe are changed
+products$bottle_price <- sub("\\$", "", products$bottle_price)
+
+# check to make sure "$" is removed
+head(products$bottle_price)
+
+# now convert values to numbers
+products$bottle_price <- as.numeric(products$bottle_price)
+
+# check that the values are now numeric
+str(products$bottle_price)
+```
+
+Plot case cost vs. bottle price:
+
+```{r,echo=FALSE,warning=FALSE}
+plot(products$bottle_price, case_cost, main = "Plot of Case Cost vs. Bottle Price", xlab = "Bottle Price", ylab = "Case Cost", xlim = c(0,1000))
+```
+
+It looks like there might be a relationship here. Let's run a regression to check:
+
+```{r,echo=FALSE}
+casecost_v_bottleprice <- lm(case_cost ~ products$bottle_price)
+x <- summary(casecost_v_bottleprice)
+kable(data.frame("bottle price coefficient" = x$coefficients[2,1], "p-value of bottle price" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 2)
+```
+
+Huzzah! Another variable significantly related to case cost! As Bottle Price increases by $1, Case Cost increases by $1.94, with p < 0.001, and 36% of the variation in Case Cost is explained by Bottle Price (R^2^ = 0.36).
+
+**Finally, let's check if proof is related to case cost**
+
+Plot case cost vs. proof:
+
+```{r,echo=FALSE}
+# first we have to convert proof to numeric values
+products$proof <- as.numeric(products$proof)
+
+# now we can plot
+plot(proof, case_cost, main = "Plot of Case Cost vs. Proof", xlab = "Proof", ylab = "Case Cost")
+```
+
+There appears to be a few influential points, but not a strong underlying a relationship. Let's run a regression:
+
+```{r,echo=FALSE}
+casecost_v_proof <- lm(case_cost ~ proof)
+x <- summary(casecost_v_proof)
+kable(data.frame("p-value of proof" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 2)
+```
+
+Proof is NOT significantly related to case cost (p = 0.32, R^2^ = 0.09).
+
+\pagebreak
+
+#Summary
+
+We found 2 variables that are significantly related to case cost: shelf price and bottle price. Shelf price explains nearly 50% of the variation in case cost, and bottle price explains 35% of the variation in case cost.
+
+However, shelf price and bottle price seem like they could be correlated with one another: shouldn't the price of an individual bottle predict how much the bottle is sold for? Let's do a quick plot of shelf price vs. bottle price and run a quick regression:
+
+```{r,echo=FALSE}
+plot(products$bottle_price, shelf_price, main = "Plot of Shelf Price vs. Bottle Price", xlab = "Bottle Price", ylab = "Shelf Price", xlim = c(0,1000))
+
+shelfprice_v_bottleprice <- lm(shelf_price ~ products$bottle_price)
+x <- summary(shelfprice_v_bottleprice)
+kable(data.frame("p-value" = x$coefficients[2,4], "R-squared" = x$r.squared), format = "markdown", digits = 4)
+```
+
+Our hypothesis was correct: shelf price and bottle price are nearly perfectly correlated -- essentially all of the variation in shelf price can be explained by bottle price (R^2^ = 0.9975).
+
+Becaue shelf price and bottle price are so perfectly correlated, we would not want to use BOTH of them to predict case cost, because we would be using redundant information. Since shelf price is more closely correlated with case cost, we would want to use only shelf price to predict case cost (if we were choosing between shelf price and bottle price).
